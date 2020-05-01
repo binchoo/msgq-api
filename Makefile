@@ -19,4 +19,3 @@ test: $(run:.c=)
 
 $(run:.c=): $(run)
 	gcc -o $(run:.c=) $(run)
-

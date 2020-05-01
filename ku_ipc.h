@@ -3,8 +3,8 @@
  * Jaebin, Ju
  */
 
-#define KUIPC_MAXMSG 	88888888 /* Max node count for one queue */
-#define KUIPC_MAXVOL	12800  /*Limit for bytes of msg in one queue */
+#define KUIPC_MAXMSG 	10 /* Max node count for one queue */
+#define KUIPC_MAXVOL	12000  /*Limit for bytes of msg in one queue */
 
 #define KU_IPC_CREAT 	0b0001
 #define KU_IPC_EXCL	0b0010

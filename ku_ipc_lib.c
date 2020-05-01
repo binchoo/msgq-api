@@ -6,8 +6,8 @@
 #include <assert.h>
 
 #include "ku_ipc.h"
-#define DEV_NAME 	"ku_ipc"
 
+#define DEV_NAME 	"ku_ipc"
 #define IOCTL_MAGIC_NUM 'z'
 #define IOCTL_START_NUM	0x89
 #define IOCTL_ADDUSER 	_IOWR(IOCTL_MAGIC_NUM, IOCTL_START_NUM+1, int)
@@ -27,7 +27,7 @@ struct query {
 	unsigned int bytes;
 };
 
-/*produce struct query my_query*/
+/*declare struct query my_query*/
 #define __make_query(__msgqid, __msgbufp, __usrbytes) \
 	struct query my_query = {	\
 		.msgqid = __msgqid,	\
@@ -40,164 +40,179 @@ int ku_msgclose(int msgqid);
 int ku_msgsnd(int msgqid, void* msgp, int msgsz, int msgflg);
 int ku_msgrcv(int msgqid, void* msgp, int msgsz, long msgtyp, int msgflg);
 
+/* Test Functions */
+struct testbuf {
+	long type;
+	char text[5];
+};
 
-int post() {
-	int fd = open("/dev/"DEV_NAME, O_RDWR);
-	int ret;
-
-	struct msgbuf msg = {
-		.type = 3,
-		.text = "hello world!\n",
+void getQueueSuccess(int q, int msgflg) {
+	printf("getQueueSuccess\n");
+	assert(ku_msgget(q, msgflg) == q);
+}
+void getQueueFail(int q, int msgflg) {
+	printf("getQueueFail\n");
+	assert(ku_msgget(q, msgflg) == -1);
+}
+void sendMessageSuccess(int q, long type, char* message) {
+	printf("sendMessageSuccess\n");
+	struct msgbuf buffer = {
+		.type = type,
 	};
-
-	struct query my_query = {
-		.msgqid = 3,
-		.msg = &msg,
+	strncpy(buffer.text, message, strlen(message) + 1);
+	assert(ku_msgsnd(q, &buffer, sizeof(buffer), KU_IPC_NOWAIT) == 0);
+}
+void sendMessageFail(int q, long type, char* message) {
+	printf("sendMessageFail\n");
+	struct msgbuf buffer = {
+		.type = type,
 	};
-
-	ret = ioctl(fd, IOCTL_CHKEXCL, &my_query);
-	printf("check_q==true >> %d\n", ret);
-	ret = ioctl(fd, IOCTL_ADDUSER, &my_query);
-	printf("get_q==3 >> %d\n", ret);
-
-	ret = ioctl(fd, IOCTL_CHKEXCL, &my_query);
-	printf("check_q==false >> %d\n", ret);
-	ret = ioctl(fd, IOCTL_ADDMSG, &my_query);
-	printf("msgadd==0 >> %d\n", ret);
-
-	ret = ioctl(fd, IOCTL_SUBMSG, &my_query);
-	printf("msgsub==0 >> %d\n", ret);
-	printf("msgsub_type==3 >> %ld\n", my_query.msg->type);
-	printf("msgsub_text==hello world! >> %s\n", my_query.msg->text);
-
-	for (int i = 0; i < 3; i++) {
-		ret = ioctl(fd, IOCTL_CHKEXCL, &my_query);
-		printf("check_q==false >> %d\n", ret);
-		ret = ioctl(fd, IOCTL_ADDMSG, &my_query);
-		printf("msgadd==0 >> %d\n", ret);
-	}
-
-	for (int i = 0; i < 3; i++) {
-		ret = ioctl(fd, IOCTL_CHKEXCL, &my_query);
-		printf("check_q==false >> %d\n", ret);
-		ret = ioctl(fd, IOCTL_SUBMSG, &my_query);
-		printf("msgsub==0 >> %d\n", ret);
-		printf("msgsub_type==3 >> %ld\n", my_query.msg->type);
-		printf("msgsub_text==hello world! >> %s\n", my_query.msg->text);
-	}
-
-	ret = ioctl(fd, IOCTL_SUBMSG, &my_query);
-	printf("msgsub==-1 >> %d\n", ret);
-	ret = ioctl(fd, IOCTL_CHKEXCL, &my_query);
-	printf("check_q==false >> %d\n", ret);
-
-	ret = ioctl(fd, IOCTL_SUBUSER, &my_query);
-	printf("close==0 >> %d\n", ret);
-	ret = ioctl(fd, IOCTL_CHKEXCL, &my_query);
-	printf("check_q==true >> %d\n", ret);
-
-	close(fd);
+	strncpy(buffer.text, message, strlen(message) + 1);
+	assert(ku_msgsnd(q, &buffer, sizeof(buffer), KU_IPC_NOWAIT) == -1);
 }
-
-void snd_rcv() {
-	int q = ku_msgget(8, KU_IPC_CREAT);
-	int ret;
-
-	struct msgbuf rbuf;
-	struct msgbuf wbuf = {
-		.type = 3,
-		.text = "hello my friend!",
+void readMessageSuccess(int q, long type) {
+	printf("readMessageSuccess\n");
+	struct msgbuf buffer = {
+		.type = type,
 	};
-
-	assert(q == 8);
-	ret = ku_msgsnd(q, &wbuf, sizeof(wbuf), KU_IPC_NOWAIT); //send type(3) msg
-
-	assert(ret == 0);
-	wbuf.type = 1;
-	wbuf.text[0] = 'X';
-	ret = ku_msgsnd(q, &wbuf, sizeof(wbuf), KU_IPC_NOWAIT); //send diffrent type(1) msg
-
-	assert(ret == 0);
-	assert(__chk_flag(KU_IPC_NOWAIT, KU_IPC_NOWAIT));
-	ret = ku_msgrcv(9, &rbuf, sizeof(rbuf), -3, KU_IPC_NOWAIT); //wrong queue number
-	
-	assert(ret == -1);
-	printf("test1\n");
-	ret = ku_msgrcv(q, &rbuf, sizeof(rbuf), -3, KU_IPC_NOWAIT); //good get type 3 msg
-	
-	assert(ret > 0);
-	printf("rbuf[%d] = %s\n", ret, rbuf.text); 
-	printf("test2\n");
-	ret = ku_msgrcv(q, &rbuf, 5, 1, KU_IPC_NOWAIT); //fail get type 1 with small buffer, NO_KU_MSG_NOERROR
-
-	assert(ret == -1);
-	printf("test3\n");
-	memset(&rbuf, 0, sizeof(rbuf));
-	ret = ku_msgrcv(q, &rbuf, 8+5, 1, KU_IPC_NOWAIT|KU_MSG_NOERROR); //good get type 1 msg, even small size
-
-	assert(ret > 0);
-	printf("rbuf[%d] = %s\n", ret, rbuf.text); 
-	printf("test4\n");
-	ret = ku_msgget(q, KU_IPC_CREAT|KU_IPC_EXCL); //wrong queue alloc, it is EXCLUSIVE
-
-	assert(ret == -1);
-	ret = ku_msgclose(q); //good queue close
-
-	assert(ret == 0);
-	ret = ku_msgclose(q); //wrong close, queue not exists
-
-	assert(ret == -1);
+	assert(ku_msgrcv(q, &buffer, sizeof(buffer), type, KU_IPC_NOWAIT | KU_MSG_NOERROR) > 0);
+	printf("Ive got (%s)\n", buffer.text);
 }
-
-void block_rcv() {
-	int q = ku_msgget(8, KU_IPC_CREAT);
-	int ret;
-
-	struct msgbuf rbuf;
-
-	assert(q == 8);
-	ret = ku_msgrcv(q, &rbuf, 10000, 0, KU_MSG_NOERROR); //blocking read. should pass assert
-
-	assert(ret > 0);
-	printf("rbuf[%d] = %s\n", ret, rbuf.text); 
-	ku_msgclose(q);
-}
-
-
-void send() {
-	int q = ku_msgget(8, KU_IPC_CREAT);
-	struct msgbuf wbuf = {
-		.type = 11,
-		.text = "hi my world!",
+void readMessageLoopingSuccess(int q, long type) {
+	printf("readMessageLoopingSuccess\n");
+	struct msgbuf buffer = {
+		.type = type,
 	};
-
-	printf("q=%d?\n", q);
-	assert(q == 8);
-	int ret = ku_msgsnd(q, &wbuf, sizeof(wbuf), KU_IPC_NOWAIT);
-	assert(ret == 0);
-
-	ret = ku_msgclose(q);
-	assert(ret == 0);
+	assert(ku_msgrcv(q, &buffer, sizeof(buffer), type, KU_MSG_NOERROR) > 0);
+	printf("Ive got (%s)\n", buffer.text);
+}
+void readMessageFail(int q, long type) {
+	printf("readMessageFail\n");
+	struct msgbuf buffer = {
+		.type = type,
+	};
+	assert(ku_msgrcv(q, &buffer, sizeof(buffer), type, KU_IPC_NOWAIT | KU_MSG_NOERROR) == -1);
+}
+void readMessageIntoSmallerSuccess(int q, long type) {
+	printf("readMessageIntoSmallerSuccess\n");
+	struct testbuf buffer;
+	assert(ku_msgrcv(q, &buffer, sizeof(buffer), type, KU_IPC_NOWAIT | KU_MSG_NOERROR) > 0);
+	printf("Ive got (%s)\n", buffer.text);
+}
+void readMessageIntoSmallerLoopingSuccess(int q, long type) {
+	printf("readMessageIntoSmallerLoopingSuccess\n");
+	struct testbuf buffer = {
+		.type = type,
+	};
+	assert(ku_msgrcv(q, &buffer, sizeof(buffer), type, KU_MSG_NOERROR) > 0);
+	printf("Ive got (%s)\n", buffer.text);
+}
+void readMessageIntoSmallerFail(int q, long type) {
+	printf("readMessageIntoSmallerFail\n");
+	struct testbuf buffer;
+	assert(ku_msgrcv(q, &buffer, sizeof(buffer), type, KU_IPC_NOWAIT) == -1);
+	printf("Ive got (%s)\n", buffer.text);
+}
+void closeQueueSuccess(int q) {
+	printf("closeQueueSuccess\n");
+	assert(ku_msgclose(q) == 0);
+}
+void closeQueueFail(int q) {
+	printf("closeQueueFail\n");
+	assert(ku_msgclose(q) == -1);
 }
 
-int main(void) {
-	snd_rcv();
-	printf("busy io\n");
-	//block_rcv();
+void selfSendReceiveTest() {
+
+	int q = 8;
+	int i;
+
+	getQueueFail(q, 16);
+	getQueueSuccess(q, KU_IPC_CREAT);
+	getQueueFail(q, KU_IPC_EXCL);
+
+	for(i = 0; i < 10; i++)
+		sendMessageSuccess(q, 1, "hello world!");
+	sendMessageFail(q, 1, "hello world! LAST");
+
+	for(i = 0; i < 10; i++)
+		readMessageSuccess(q, -1);
+	readMessageFail(q, 1);
+	readMessageFail(q, 0);
+
+	sendMessageSuccess(q, 1, "hello world!");
+	readMessageIntoSmallerFail(q, 1);
+	readMessageIntoSmallerSuccess(q, 1);
+
+	closeQueueSuccess(q);
+	closeQueueFail(q);
 }
 
+void produceOne() {
+	int q = 7;
+	getQueueSuccess(q, KU_IPC_CREAT);
+	sendMessageSuccess(q, 1, "producer produces");
+	closeQueueSuccess(q);
+}
+
+void produceMany() {
+	int q = 7;
+	getQueueSuccess(q, KU_IPC_CREAT);
+	sendMessageSuccess(q, 1, "producer produces");
+	sleep(1);
+	sendMessageSuccess(q, 1, "producer produces");
+	sleep(1);
+	sendMessageSuccess(q, 1, "producer produces");
+	sleep(1);
+	closeQueueSuccess(q);
+}
+
+void consumeOne() {
+	int q = 7;
+	getQueueSuccess(q, KU_IPC_CREAT);
+	readMessageSuccess(q, 1);
+	closeQueueSuccess(q);
+}
+
+void consumeMany() {
+	int q = 7;
+	getQueueSuccess(q, KU_IPC_CREAT);
+	readMessageLoopingSuccess(q, 1);
+	readMessageLoopingSuccess(q, 1);
+	readMessageLoopingSuccess(q, 1);
+	closeQueueSuccess(q);
+}
+
+void consumeManyForSmallerBuffer() {
+	int q = 7;
+	getQueueSuccess(q, KU_IPC_CREAT);
+	readMessageIntoSmallerLoopingSuccess(q, 1);
+	readMessageIntoSmallerLoopingSuccess(q, 1);
+	readMessageIntoSmallerLoopingSuccess(q, 1);
+	closeQueueSuccess(q);
+}
+
+/*
+void main(void) {
+	selfSendReceiveTest();
+}
+*/
+
+/* Implementaions */
 int ku_msgget(int key, int msgflg) {
 	int retval = -1;
 	int fd = open("/dev/"DEV_NAME, O_RDONLY);
 
 	__make_query(key, NULL, 0);
-	
-	if (__chk_flag(msgflg, KU_IPC_EXCL)) {
-		if(ioctl(fd, IOCTL_CHKEXCL, &my_query))
-			if(0 == ioctl(fd, IOCTL_ADDUSER, &my_query))
+
+	if (__chk_flag(msgflg, KU_IPC_EXCL)) {			
+		if (ioctl(fd, IOCTL_CHKEXCL, &my_query))	//check exclusiveness
+			if (0 == ioctl(fd, IOCTL_ADDUSER, &my_query))
 				retval = key;
-	} else if (0 == ioctl(fd, IOCTL_ADDUSER, &my_query))
-		retval = key;
+	}
+	else if (__chk_flag(msgflg, KU_IPC_CREAT))
+		if (0 == ioctl(fd, IOCTL_ADDUSER, &my_query))
+			retval = key;
 
 	close(fd);
 	return retval;
@@ -222,15 +237,14 @@ int ku_msgsnd(int msgqid, void* msgp, int msgsz, int msgflg) {
 	__make_query(msgqid, msgp, msgsz);
 
 	if (!msgp)
-	      return -1;
+		return -1;
 
 	do {
 		retval = ioctl(fd, IOCTL_ADDMSG, &my_query);
 		if (__chk_flag(msgflg, KU_IPC_NOWAIT))
-				break;
+			break;
 	} while (retval == -1);
 
-	assert(retval == -1 || retval == 0);
 	close(fd);
 	return retval;
 }
@@ -239,7 +253,7 @@ int ku_msgrcv(int msgqid, void* msgp, int msgsz, long msgtyp, int msgflg) {
 	static int ERROR = -34;
 	int retval = -1;
 	int fd = open("/dev/"DEV_NAME, O_RDONLY);
-	
+
 	__make_query(msgqid, msgp, msgsz);
 
 	if (!msgp)
@@ -247,18 +261,18 @@ int ku_msgrcv(int msgqid, void* msgp, int msgsz, long msgtyp, int msgflg) {
 
 	do {
 		ioctl(fd, IOCTL_AQLOCK, &my_query);
-		if (!ioctl(fd, IOCTL_PEEKMSG, &my_query) //if ubuf size is smaller
-			&& !__chk_flag(msgflg, KU_MSG_NOERROR)) //and KU_MSG_NOEEROR not set.
-				retval = ERROR;
-		else 
-			retval = ioctl(fd, IOCTL_SUBMSG, &my_query); //retrieve msg
+		if (!ioctl(fd, IOCTL_PEEKMSG, &my_query) 		//if ubuf size is smaller
+			&& !__chk_flag(msgflg, KU_MSG_NOERROR)) 	//and KU_MSG_NOEEROR not set.
+			retval = ERROR;
+		else
+			retval = ioctl(fd, IOCTL_SUBMSG, &my_query); 	//retrieve msg
 
 		ioctl(fd, IOCTL_RELLOCK, &my_query);
-	} while (!__chk_flag(msgflg, KU_IPC_NOWAIT) && retval == -1); // keep looping, when KU_IPC_NOWAIT is not set.
+	} while (!__chk_flag(msgflg, KU_IPC_NOWAIT) && retval == -1); 	//keep looping, when KU_IPC_NOWAIT is not set.
 
 	close(fd);
-
 	if (retval == ERROR)
 		retval = -1;
+
 	return retval;
 }
